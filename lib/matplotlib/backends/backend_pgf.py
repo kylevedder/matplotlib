@@ -42,7 +42,9 @@ def get_fontspec():
     texcommand = mpl.rcParams["pgf.texsystem"]
 
     if texcommand != "pdflatex":
-        latex_fontspec.append("\\usepackage{fontspec}")
+        latex_fontspec.append("\\usepackage{mathspec}")
+
+    latex_fontspec.append("\\newcommand\\unaryminus{\\smash{\\scalebox{0.5}[1.0]{\( - \)}}}")
 
     if texcommand != "pdflatex" and mpl.rcParams["pgf.rcfonts"]:
         families = ["serif", "sans\\-serif", "monospace"]
@@ -53,6 +55,13 @@ def get_fontspec():
             path = pathlib.Path(fm.findfont(family))
             latex_fontspec.append(r"\%s{%s}[Path=%s]" % (
                 command, path.name, path.parent.as_posix() + "/"))
+
+        font_families = mpl.rcParams["font.family"]
+        if len(font_families) > 0:
+            font_family = font_families[0].replace("-", "\\-")
+            font_name = pathlib.Path(fm.findfont(font_family)).name
+            latex_fontspec.append(r"\%s{%s}" % (
+                    "setallmainfonts", font_name))
 
     return "\n".join(latex_fontspec)
 
@@ -101,6 +110,8 @@ def common_texification(text):
     # Sometimes, matplotlib adds the unknown command \mathdefault.
     # Not using \mathnormal instead since this looks odd for the latex cm font.
     text = _replace_mathdefault(text)
+    text = text.replace(". ", ".\\ ")
+    text = text.replace("-", "\\unaryminus{}")
     # split text into normaltext and inline math parts
     parts = re_mathsep.split(text)
     for i, s in enumerate(parts):
@@ -355,7 +366,11 @@ class LatexManager:
             raise ValueError("Error processing '{}'\nLaTeX Output:\n{}"
                              .format(text, answer)) from err
         w, h, o = float(width[:-2]), float(height[:-2]), float(offset[:-2])
-
+        # Fix box of power math. Without this, the tight figure BB might cut
+        # off text.
+        if ("\(" in text and "^" in text):
+            h *= 1.3
+            w -= 2
         # the height returned from LaTeX goes from base to top.
         # the height matplotlib expects goes from bottom to top.
         self.str_cache[textbox] = (w, h + o, o)
